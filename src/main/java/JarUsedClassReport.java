@@ -108,7 +108,11 @@ public class JarUsedClassReport {
 			//
 			Iterable<String> iterable = null;
 			//
-			for (int i = 1; i <= 8; i++) {
+			int countJavaClasses = countJavaClasses(statement);
+			//
+			Integer index = null;
+			//
+			for (int i = 1; i <= Integer.MAX_VALUE; i++) {
 				//
 				if ((iterable = getJavaClassNameByLevel(statement, i)) == null || iterable.iterator() == null) {
 					//
@@ -116,6 +120,8 @@ public class JarUsedClassReport {
 					//
 				} // if
 					//
+				countJavaClasses = countJavaClasses(statement);
+				//
 				for (final String string : iterable) {
 					//
 					insertJavaClasses(
@@ -129,9 +135,17 @@ public class JarUsedClassReport {
 					//
 				} // for
 					//
+				if (Objects.equals(countJavaClasses, countJavaClasses(statement))) {
+					//
+					index = Integer.valueOf(i);
+					//
+					break;
+					//
+				} // if
+					//
 			} // for
 				//
-			System.out.println("countJavaClasses=" + countJavaClasses(statement));
+			System.out.println("index=" + index + ",countJavaClasses=" + countJavaClasses(statement));
 			//
 		} // try
 			//
