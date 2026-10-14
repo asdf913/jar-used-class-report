@@ -3,10 +3,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 import java.util.function.BiPredicate;
@@ -20,6 +26,7 @@ import java.util.zip.ZipFile;
 import org.apache.commons.collections4.IterableUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.function.FailableFunction;
@@ -47,7 +54,7 @@ import io.github.toolfactory.narcissus.Narcissus;
 
 public class JarUsedClassReport {
 
-	public static void main(final String[] args) throws IOException {
+	public static void main(final String[] args) throws IOException, SQLException {
 		//
 		if (args == null || args.length < 1) {
 			//
@@ -71,20 +78,229 @@ public class JarUsedClassReport {
 			//
 		} // if
 			//
-		try (final ZipFile zipFile = new ZipFile(file)) {
+		try (final ZipFile zipFile = new ZipFile(file);
+				final Connection connection = DriverManager
+						.getConnection(String.format("jdbc:duckdb:%1$s", new File(".", "report.db").getAbsolutePath()));
+				final Statement statement = connection != null ? connection.createStatement() : null) {
 			//
-			System.out.println(perform(0,
-					() -> testAndApply(Objects::nonNull,
-							zipFile.getEntry(
-									StringUtils.joinWith(".", replace(getMainClass(zipFile), '.', '/'), "class")),
-							x -> zipFile.getInputStream(x), null)));
+			if (statement != null) {
+				//
+				statement.execute("create table if not exists java_class(level int,class_name text);");
+				//
+				statement.execute("truncate table java_class;");
+				//
+			} // if
+				//
+			final Collection<Type> declaredTypes = toList(map(
+					filter(stream(testAndApply(Objects::nonNull, Type.class, FieldUtils::getAllFieldsList, null)),
+							f -> f != null && Objects.equals(f.getType(), Type.class)
+									&& Modifier.isStatic(f.getModifiers())),
+					f -> cast(Type.class, Narcissus.getStaticField(f))));
+			//
+			insertJavaClasses(
+					perform(intValue(getJavaClassMaxLevel(statement), 0),
+							() -> testAndApply(Objects::nonNull,
+									zipFile.getEntry(StringUtils.joinWith(".", replace(getMainClass(zipFile), '.', '/'),
+											"class")),
+									x -> zipFile.getInputStream(x), null),
+							declaredTypes),
+					statement, declaredTypes);
+			//
+			Iterable<String> iterable = null;
+			//
+			for (int i = 1; i <= 8; i++) {
+				//
+				if ((iterable = getJavaClassNameByLevel(statement, i)) == null || iterable.iterator() == null) {
+					//
+					continue;
+					//
+				} // if
+					//
+				for (final String string : iterable) {
+					//
+					insertJavaClasses(
+							perform(i,
+									() -> testAndApply(Objects::nonNull,
+											zipFile.getEntry(
+													StringUtils.joinWith(".", replace(string, '.', '/'), "class")),
+											x -> zipFile.getInputStream(x), null),
+									declaredTypes),
+							statement, declaredTypes, "java.base", "java.logging");
+					//
+				} // for
+					//
+			} // for
+				//
+			System.out.println("countJavaClasses=" + countJavaClasses(statement));
 			//
 		} // try
 			//
 	}
 
+	private static Integer countJavaClasses(final Statement statement) throws SQLException {
+		//
+		Integer count = null;
+		//
+		try (final ResultSet rs = statement != null ? statement.executeQuery("select count(1) from java_class;")
+				: null) {
+			//
+			while (rs != null && rs.next()) {
+				//
+				if (count != null) {
+					//
+					throw new RuntimeException();
+					//
+				} // if
+					//
+				count = Integer.valueOf(rs.getInt(1));
+				//
+			} // while
+				//
+		} // try
+			//
+		return count;
+		//
+	}
+
+	private static void insertJavaClasses(final Multimap<Integer, String> multimap, final Statement statement,
+			final Collection<Type> declaredTypes, final String... javaBasedModules) throws SQLException {
+		//
+		if (multimap == null || multimap.isEmpty()) {
+			//
+			return;
+			//
+		} // if
+			//
+		ResultSet rs = null;
+		//
+		Boolean exists = null;
+		//
+		String value, name = null;
+		//
+		for (final Entry<Integer, String> entry : multimap.entries()) {
+			//
+			if (entry == null) {
+				//
+				continue;
+				//
+			} // if
+				//
+			if (StringUtils.length(value = entry.getValue()) == 1 && declaredTypes != null
+					&& contains(declaredTypes, Type.getType(value))) {
+				//
+				continue;
+				//
+			} // if
+				//
+			if ((name = getName(getModule(forName(replace(value, '/', '.'))))) != null && javaBasedModules != null
+					&& ArrayUtils.contains(javaBasedModules, name)) {
+				//
+				continue;
+				//
+			} // if
+				//
+			if (name == null && (value != null && value.startsWith("java/"))) {
+				//
+				throw new RuntimeException(value);
+				//
+			} // if
+				//
+			exists = null;
+			//
+			if ((rs = statement != null ? statement.executeQuery(String.format(
+					"select exists(select 1 from java_class where class_name='%1$s');", value = entry.getValue()))
+					: null) != null) {
+				//
+				while (rs.next()) {
+					//
+					if (exists != null) {
+						//
+						throw new RuntimeException();
+						//
+					} // if
+						//
+					exists = Boolean.valueOf(rs.getBoolean(1));
+					//
+				} // while
+					//
+				if (!BooleanUtils.toBooleanDefaultIfNull(exists, false)) {
+					//
+					if (StringUtils.length(value) > 0 && Character.isUpperCase(value.charAt(0))) {
+						//
+						throw new RuntimeException(value);
+						//
+					} // if
+						//
+					statement.execute(String.format("insert into java_class(level,class_name)values(%1$s,'%2$s');",
+							entry.getKey(), value));
+					//
+				} // if
+					//
+			} // if
+				//
+		} // for
+			//
+	}
+
+	private static List<String> getJavaClassNameByLevel(final Statement instance, final int level) throws SQLException {
+		//
+		List<String> list = null;
+		//
+		try (final ResultSet rs = instance != null
+				? instance.executeQuery(String.format(
+						"select distinct class_name from java_class where level=%1$s order by class_name;", level))
+				: null) {
+			//
+			String string = null;
+			//
+			while (rs != null && rs.next()) {
+				//
+				if (!contains(list = ObjectUtils.getIfNull(list, ArrayList::new), string = rs.getString(1))) {
+					//
+					add(list, string);
+					//
+				} // if
+					//
+			} // while
+				//
+		} // try
+			//
+		return list;
+		//
+	}
+
+	private static int intValue(final Number instance, final int defaultValue) {
+		return instance != null ? instance.intValue() : defaultValue;
+	}
+
+	private static Integer getJavaClassMaxLevel(final Statement instance) throws SQLException {
+		//
+		Integer max = null;
+		//
+		try (final ResultSet rs = instance != null ? instance.executeQuery("select max(level) from java_class;")
+				: null) {
+			//
+			while (rs != null && rs.next()) {
+				//
+				if (max != null) {
+					//
+					throw new RuntimeException();
+					//
+				} // if
+					//
+				max = Integer.valueOf(rs.getInt(1));
+				//
+			} // while
+				//
+		} // try
+			//
+		return max;
+		//
+	}
+
 	private static Multimap<Integer, String> perform(final int index,
-			final FailableSupplier<InputStream, IOException> failableSupplier) throws IOException {
+			final FailableSupplier<InputStream, IOException> failableSupplier, final Collection<Type> declaredTypes)
+			throws IOException {
 		//
 		Multimap<Integer, String> multimap = null;
 		//
@@ -112,16 +328,40 @@ public class JarUsedClassReport {
 						multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 						(a, b) -> put(b, Integer.valueOf(index), a));
 				//
+				if (multimap.values().stream().anyMatch(
+						x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+								|| x.endsWith("<*>") || x.equals("java/")))) {
+					//
+					throw new RuntimeException();
+					//
+				} // if
+					//
 				testAndAccept((a, b) -> a != null && !containsValue(b, a), cvi.superName,
 						multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 						(a, b) -> put(b, Integer.valueOf(index + 1), a));
 				//
+				if (multimap.values().stream().anyMatch(
+						x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+								|| x.endsWith("<*>") || x.equals("java/")))) {
+					//
+					throw new RuntimeException();
+					//
+				} // if
+					//
 				for (int i = 0; cvi.interfaces != null && i < cvi.interfaces.length; i++) {
 					//
 					testAndAccept((a, b) -> a != null && !containsValue(b, a), ArrayUtils.get(cvi.interfaces, i),
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
+					if (multimap.values().stream().anyMatch(
+							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+									|| x.endsWith("<*>") || x.equals("java/")))) {
+						//
+						throw new RuntimeException();
+						//
+					} // if
+						//
 				} // for
 					//
 				for (int i = 0; cvi.fieldTypes != null && i < cvi.fieldTypes.length; i++) {
@@ -130,6 +370,14 @@ public class JarUsedClassReport {
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
+					if (multimap.values().stream().anyMatch(
+							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+									|| x.endsWith("<*>") || x.equals("java/")))) {
+						//
+						throw new RuntimeException(ArrayUtils.get(cvi.fieldTypes, i));
+						//
+					} // if
+						//
 				} // for
 					//
 				InnerClass ic = null;
@@ -146,38 +394,69 @@ public class JarUsedClassReport {
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
+					if (multimap.values().stream().anyMatch(
+							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+									|| x.endsWith("<*>") || x.equals("java/")))) {
+						//
+						throw new RuntimeException();
+						//
+					} // if
+						//
 				} // for
 					//
-				Collection<String> collection = getRequiredClassNames(cvi.methods, "java.desktop", "java.base",
+				List<String> list = getRequiredClassNames(cvi.methods, "java.desktop", "java.base", "java.management");
+				//
+				for (int i = 0; i < IterableUtils.size(list); i++) {
+					//
+					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(list, i),
+							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
+							(a, b) -> put(b, Integer.valueOf(index + 1), a));
+					//
+					if (multimap.values().stream().anyMatch(
+							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+									|| x.endsWith("<*>") || x.equals("java/")))) {
+						//
+						throw new RuntimeException();
+						//
+					} // if
+						//
+				} // for
+					//
+				list = removeIfClassInMoudleNames(toArray(mvi.classNames, String[]::new), "java.desktop", "java.base",
 						"java.management");
 				//
-				for (int i = 0; i < IterableUtils.size(collection); i++) {
+				for (int i = 0; i < IterableUtils.size(list); i++) {
 					//
-					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(collection, i),
+					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(list, i),
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
+					if (multimap.values().stream().anyMatch(
+							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+									|| x.endsWith("<*>") || x.equals("java/")))) {
+						//
+						throw new RuntimeException(IterableUtils.get(list, i));
+						//
+					} // if
+						//
 				} // for
 					//
-				collection = removeIfClassInMoudleNames(toArray(mvi.classNames, String[]::new), "java.desktop",
-						"java.base", "java.management");
+				list = removeIfClassInMoudleNames(toArray(fvi.classNames, String[]::new));
 				//
-				for (int i = 0; i < IterableUtils.size(collection); i++) {
+				for (int i = 0; i < IterableUtils.size(list); i++) {
 					//
-					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(collection, i),
+					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(list, i),
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
-				} // for
-					//
-				collection = removeIfClassInMoudleNames(toArray(fvi.classNames, String[]::new));
-				//
-				for (int i = 0; i < IterableUtils.size(collection); i++) {
-					//
-					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(collection, i),
-							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
-							(a, b) -> put(b, Integer.valueOf(index + 1), a));
-					//
+					if (multimap.values().stream().anyMatch(
+							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
+									|| x.endsWith("<*>") || x.equals("java/")))) {
+						//
+						throw new RuntimeException();
+						//
+					} // if
+						//
 				} // for
 					//
 			} // if
@@ -185,6 +464,7 @@ public class JarUsedClassReport {
 		} // try
 			//
 		return multimap;
+
 		//
 	}
 
@@ -205,9 +485,9 @@ public class JarUsedClassReport {
 		}
 	}
 
-	private static Collection<String> getRequiredClassNames(final Method[] ms, final String... javaModuleNames) {
+	private static List<String> getRequiredClassNames(final Method[] ms, final String... javaModuleNames) {
 		//
-		Collection<String> names = null;
+		List<String> names = null;
 		//
 		Method m = null;
 		//
@@ -239,13 +519,49 @@ public class JarUsedClassReport {
 				//
 			} // if
 				//
-			if (!contains(declaredTypes, returnType = Type.getReturnType(descriptor))) {
+			if ((toString = toString(returnType = Type.getReturnType(descriptor))) != null) {
 				//
-				if ((toString = toString(returnType)) != null && toString.startsWith("L") && toString.endsWith(";")) {
+				if (StringUtils.length(toString) == 2 && toString.startsWith("[")) {
+					//
+					continue;
+					//
+				} else if (StringUtils.length(toString) == 3 && toString.startsWith("[[")) {
+					//
+					continue;
+					//
+				} // if
+					//
+			} // if
+				//
+			if (!contains(declaredTypes, returnType)) {
+				//
+				if (toString != null && toString.startsWith("L") && toString.endsWith(";")) {
 					//
 					if (!ArrayUtils.contains(javaModuleNames,
 							getName(getModule(forName(replace(
 									substringBetween = StringUtils.substringBetween(toString, "L", ";"), '/', '.')))))
+							&& !contains(names = ObjectUtils.getIfNull(names, ArrayList::new), substringBetween)) {
+						//
+						add(names, substringBetween);
+						//
+					} // if
+						//
+				} else if (toString != null && toString.startsWith("[L") && toString.endsWith(";")) {
+					//
+					if (!ArrayUtils.contains(javaModuleNames,
+							getName(getModule(forName(replace(
+									substringBetween = StringUtils.substringBetween(toString, "[L", ";"), '/', '.')))))
+							&& !contains(names = ObjectUtils.getIfNull(names, ArrayList::new), substringBetween)) {
+						//
+						add(names, substringBetween);
+						//
+					} // if
+						//
+				} else if (toString != null && toString.startsWith("[[L") && toString.endsWith(";")) {
+					//
+					if (!ArrayUtils.contains(javaModuleNames,
+							getName(getModule(forName(replace(
+									substringBetween = StringUtils.substringBetween(toString, "[[L", ";"), '/', '.')))))
 							&& !contains(names = ObjectUtils.getIfNull(names, ArrayList::new), substringBetween)) {
 						//
 						add(names, substringBetween);
@@ -271,11 +587,37 @@ public class JarUsedClassReport {
 					//
 				} // if
 					//
+				if (argumentTypeToString != null) {
+					//
+					if (argumentTypeToString.length() == 2 && argumentTypeToString.startsWith("[")) {
+						//
+						continue;
+						//
+					} else if (argumentTypeToString.length() == 3 && argumentTypeToString.startsWith("[[")) {
+						//
+						continue;
+						//
+					} // if
+						//
+				} // if
+					//
 				if (argumentTypeToString.startsWith("[L") && argumentTypeToString.endsWith(";")) {
 					//
 					if (!ArrayUtils.contains(javaModuleNames,
 							getName(getModule(forName(replace(
 									substringBetween = StringUtils.substringBetween(argumentTypeToString, "[L", ";"),
+									'/', '.')))))
+							&& !contains(names = ObjectUtils.getIfNull(names, ArrayList::new), substringBetween)) {
+						//
+						add(names, substringBetween);
+						//
+					} // if
+						//
+				} else if (argumentTypeToString.startsWith("[[L") && argumentTypeToString.endsWith(";")) {
+					//
+					if (!ArrayUtils.contains(javaModuleNames,
+							getName(getModule(forName(replace(
+									substringBetween = StringUtils.substringBetween(argumentTypeToString, "[[L", ";"),
 									'/', '.')))))
 							&& !contains(names = ObjectUtils.getIfNull(names, ArrayList::new), substringBetween)) {
 						//
@@ -313,13 +655,14 @@ public class JarUsedClassReport {
 					//
 				} // if
 					//
-				throw new RuntimeException(exception);
+				add(names, exception);
 				//
 			} // for
 				//
 		} // for
 			//
 		return names;
+
 		//
 	}
 
@@ -416,7 +759,7 @@ public class JarUsedClassReport {
 		return instance != null ? instance.toArray(generator) : null;
 	}
 
-	private static Collection<String> removeIfClassInMoudleNames(final String[] ss, final String... moduleNames) {
+	private static List<String> removeIfClassInMoudleNames(final String[] ss, final String... moduleNames) {
 		//
 		final List<String> list = testAndApply(Objects::nonNull,
 				testAndApply(Objects::nonNull, ss, Arrays::asList, null), ArrayList::new, null);
@@ -523,6 +866,14 @@ public class JarUsedClassReport {
 				//
 				final String fieldType = StringUtils.substring(descriptor, 1, StringUtils.length(descriptor) - 1);
 				//
+				if (fieldType != null && ((fieldType.contains(";") || fieldType.contains("[")
+						|| Objects.equals(fieldType, "-TT") || fieldType.endsWith("<*>"))
+						|| (fieldType.length() > 0 && Character.isUpperCase(fieldType.charAt(0))))) {
+					//
+					throw new RuntimeException(fieldType);
+					//
+				} // if
+					//
 				if (!ArrayUtils.contains(fieldTypes, fieldType)) {
 					//
 					fieldTypes = ArrayUtils.add(fieldTypes, fieldType);
@@ -542,11 +893,189 @@ public class JarUsedClassReport {
 					final String fieldType = StringUtils.substring(signature, index1 + StringUtils.length("<L"),
 							index2);
 					//
-					if (!ArrayUtils.contains(fieldTypes, fieldType)) {
+					final String[] ss = StringUtils.split(fieldType, ";");
+					//
+					String s, sa, saAfter, saBetween, sb = null;
+					//
+					for (int i = 0; ss != null && i < ss.length; i++) {
 						//
-						fieldTypes = ArrayUtils.add(fieldTypes, fieldType);
-						//
-					} // if
+						if ((s = ArrayUtils.get(ss, i)) == null) {
+							//
+							continue;
+							//
+						} // if
+							//
+						if (s.contains("<")) {
+							//
+							if (s.startsWith("[L")) {
+								//
+								s = StringUtils.substringBetween(s, "[L", "<");
+								//
+							} else if (s.startsWith("L")) {
+								//
+								if ((sa = StringUtils.substringAfter(s, '<')) != null) {
+									//
+									if (sa.startsWith("L") && !sa.contains("<")) {
+										//
+										if (!ArrayUtils.contains(fieldTypes, sa = sa.substring(1))) {
+											//
+											fieldTypes = ArrayUtils.add(fieldTypes, sa);
+											//
+										} // if
+											//
+									} else if (sa.startsWith("[L")) {
+										//
+										if (!sa.contains("<")) {
+											//
+											if (!ArrayUtils.contains(fieldTypes, sa = sa.substring(2))) {
+												//
+												fieldTypes = ArrayUtils.add(fieldTypes, sa);
+												//
+											} // if
+												//
+										} else {
+											//
+											if (!ArrayUtils.contains(fieldTypes,
+													saBetween = StringUtils.substringBetween(sa, "[L", "<"))) {
+												//
+												fieldTypes = ArrayUtils.add(fieldTypes, saBetween);
+												//
+											} // if
+												//
+											if (!Objects.equals(saAfter = StringUtils.substringAfter(sa, "<"), "*>")) {
+												//
+												throw new RuntimeException(saAfter);
+												//
+											} // if
+												//
+										} // if
+											//
+									} // if
+										//
+								} // if
+									//
+								if ((s = StringUtils.substringBefore(s, '<')) != null && s.startsWith("L")) {
+									//
+									s = s.substring(1);
+									//
+								} // if
+									//
+							} else if (s.endsWith("<TT")) {
+								//
+								s = StringUtils.substringBefore(s, "<TT");
+								//
+							} else if (s.contains("<[L")) {
+								//
+								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<[L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sb);
+									//
+								} // if
+									//
+								if ((sa = StringUtils.substringAfter(s, "<[L")) != null && sa.endsWith("<*>")) {
+									//
+									sa = sa.substring(0, StringUtils.length(sa) - 3);
+									//
+								} // if
+									//
+								if (!ArrayUtils.contains(fieldTypes, sa)) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sa);
+									//
+								} // if
+									//
+								continue;
+								//
+							} else if (s.contains("<L")) {
+								//
+								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sb);
+									//
+								} // if
+									//
+								if (!ArrayUtils.contains(fieldTypes, sa = StringUtils.substringAfter(s, "<L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sa);
+									//
+								} // if
+									//
+								continue;
+								//
+							} else if (s.contains("<+L")) {
+								//
+								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<+L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sb);
+									//
+								} // if
+									//
+								if (!ArrayUtils.contains(fieldTypes, sa = StringUtils.substringAfter(s, "<+L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sa);
+									//
+								} // if
+									//
+								continue;
+								//
+							} else if (s.endsWith("<*>")) {
+								//
+								s = StringUtils.substringBefore(s, "<*>");
+								//
+							} else if (s.endsWith("<TE")) {
+								//
+								s = StringUtils.substringBefore(s, "<TE");
+								//
+							} else if (s.endsWith("<-TT")) {
+								//
+								s = StringUtils.substringBefore(s, "<-TT");
+								//
+							} else if (s.endsWith("<TA")) {
+								//
+								s = StringUtils.substringBefore(s, "<TA");
+								//
+							} else if (s.endsWith("<+TV")) {
+								//
+								s = StringUtils.substringBefore(s, "<+TV");
+								//
+							} else if (s.endsWith("<TV")) {
+								//
+								s = StringUtils.substringBefore(s, "<TV");
+								//
+							} else if (s.endsWith("<TO")) {
+								//
+								s = StringUtils.substringBefore(s, "<TO");
+								//
+							} // if
+								//
+						} else if (s != null && s.startsWith("L")) {
+							//
+							s = s.substring(1);
+							//
+						} else if (s != null && s.startsWith("[L")) {
+							//
+							s = s.substring(2);
+							//
+						} else if (contains(Arrays.asList("[I>", "TT", "TR", "-TT"), s)) {
+							//
+							continue;
+							//
+						} // if
+							//
+						if (s != null && ((s.contains("<") || s.contains("[") || Objects.equals(s, "-TT")
+								|| s.endsWith("<*>")) || (s.length() > 0 && Character.isUpperCase(s.charAt(0))))) {
+							//
+							throw new RuntimeException(ArrayUtils.get(ss, i) + " " + s);
+							//
+						} // if
+							//
+						if (!ArrayUtils.contains(fieldTypes, s)) {
+							//
+							fieldTypes = ArrayUtils.add(fieldTypes, s);
+							//
+						} // if
+							//
+					} // for
 						//
 				} // if
 					//
@@ -649,8 +1178,6 @@ public class JarUsedClassReport {
 				//
 			} // if
 				//
-				// return super.visitMethod(access, name, descriptor, signature, exceptions);
-				//
 			return mvi;
 			//
 		}
@@ -662,7 +1189,9 @@ public class JarUsedClassReport {
 		private Collection<String> classNames = null;
 
 		private FieldVisitorImpl() {
+			//
 			super(Opcodes.ASM9);
+			//
 		}
 
 		@Override
@@ -706,7 +1235,18 @@ public class JarUsedClassReport {
 		private Collection<String> classNames = null;
 
 		private MethodVisitorImpl() {
+			//
 			super(Opcodes.ASM9);
+			//
+			classNames = new ArrayList<>() {
+				public boolean add(final String arg) {
+					if (Objects.equals(arg, "JI")) {
+						throw new RuntimeException(arg);
+					}
+					return super.add(arg);
+				};
+			};
+			//
 		}
 
 		@Override
@@ -716,7 +1256,23 @@ public class JarUsedClassReport {
 
 		@Override
 		public AnnotationVisitor visitAnnotation(final String descriptor, final boolean visible) {
-			throw new RuntimeException();
+			//
+			if (descriptor.startsWith("L") && descriptor.endsWith(";")) {
+				//
+				final String substringBetween = StringUtils.substringBetween(descriptor, "L", ";");
+				//
+				if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), substringBetween)) {
+					//
+					add(classNames, substringBetween);
+					//
+				} // if
+					//
+				return super.visitAnnotation(descriptor, visible);
+				//
+			} // if
+				//
+			throw new RuntimeException(descriptor);
+			//
 		}
 
 		@Override
@@ -750,41 +1306,99 @@ public class JarUsedClassReport {
 		public void visitInvokeDynamicInsn(final String name, final String descriptor,
 				final Handle bootstrapMethodHandle, final Object... bootstrapMethodArguments) {
 			//
-			if (descriptor != null) {
+			if (descriptor != null && descriptor.endsWith(";")) {
 				//
-				if (descriptor.startsWith("()L") && descriptor.endsWith(";")) {
+				final int index1 = StringUtils.indexOf(descriptor, '(');
+				//
+				final int index2 = StringUtils.indexOf(descriptor, ')');
+				//
+				String s = descriptor.substring(index1 + 1, index2);
+				//
+				String[] ss = StringUtils.split(descriptor.substring(index1 + 1, index2), ';');
+				//
+				for (int i = 0; ss != null && i < ss.length; i++) {
 					//
-					final String substringBetween = StringUtils.substringBetween(descriptor, "()L", ";");
-					//
-					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), substringBetween)) {
+					if ((s = ArrayUtils.get(ss, i)) != null) {
 						//
-						add(classNames, substringBetween);
+						if (s.startsWith("L")) {
+							//
+							s = s.substring(1);
+							//
+						} else if (s.startsWith("[L")) {
+							//
+							s = s.substring(2);
+							//
+						} else if (s.startsWith("ZL")) {
+							//
+							s = s.substring(2);
+							//
+						} else if (StringUtils.length(s) > 2 && s.indexOf('[') == 1 && s.indexOf('L') == 2) {
+							//
+							s = s.substring(3);
+							//
+						} else if (StringUtils.length(s) == 2 && s.startsWith("[")) {
+							//
+							continue;
+							//
+						} else if (contains(Arrays.asList("[BII", "DD", "JI"), s)) {
+							//
+							continue;
+							//
+						} // if
+							//
+					} // if
+						//
+					if (declaredTypes == null) {
+						//
+						declaredTypes = toList(map(filter(
+								stream(testAndApply(Objects::nonNull, Type.class, FieldUtils::getAllFieldsList, null)),
+								f -> f != null && Objects.equals(f.getType(), Type.class)
+										&& Modifier.isStatic(f.getModifiers())),
+								f -> cast(Type.class, Narcissus.getStaticField(f))));
 						//
 					} // if
 						//
-					return;
-					//
-				} else if (descriptor.startsWith("(L") && descriptor.contains(";)L") && descriptor.endsWith(";")) {
-					//
-					String substringBetween = StringUtils.substringBetween(descriptor, "(L", ";)L");
-					//
-					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), substringBetween)) {
+					if (declaredTypes != null && s != null && s.length() == 1
+							&& contains(declaredTypes, Type.getType(s))) {
 						//
-						add(classNames, substringBetween);
+						continue;
 						//
 					} // if
 						//
-					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new),
-							substringBetween = StringUtils.substringBetween(descriptor, ";)L", ";"))) {
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), s)) {
 						//
-						add(classNames, substringBetween);
+						add(classNames, s);
 						//
 					} // if
 						//
-					return;
+				} // for
+					//
+				ss = StringUtils.split(descriptor.substring(index2 + 1, StringUtils.length(descriptor) - 1), ';');
+				//
+				for (int i = 0; ss != null && i < ss.length; i++) {
+					//
+					if ((s = ArrayUtils.get(ss, i)) != null && s.startsWith("L")) {
+						//
+						s = s.substring(1);
+						//
+					} // if
+						//
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), s)) {
+						//
+						add(classNames, s);
+						//
+					} // if
+						//
+				} // for
+					//
+				if (classNames != null && classNames.stream().anyMatch(x -> x != null && x.contains(";"))) {
+					//
+					throw new RuntimeException(descriptor);
 					//
 				} // if
 					//
+				return;
+				//
 			} // if
 				//
 			throw new RuntimeException(descriptor);
@@ -821,6 +1435,18 @@ public class JarUsedClassReport {
 						//
 					return;
 					//
+				} else if (descriptor.startsWith("[[L") && descriptor.endsWith(";")) {
+					//
+					final String substringBetween = StringUtils.substringBetween(descriptor, "[[L", ";");
+					//
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), substringBetween)) {
+						//
+						add(classNames, substringBetween);
+						//
+					} // if
+						//
+					return;
+					//
 				} // if
 					//
 			} // if
@@ -841,6 +1467,22 @@ public class JarUsedClassReport {
 				//
 			} // if
 				//
+			if (descriptor != null) {
+				//
+				if (descriptor.length() == 2 && descriptor.charAt(0) == '['
+						&& contains(declaredTypes, Type.getType(StringUtils.substring(descriptor, 1)))) {
+					//
+					return;
+					//
+				} else if (descriptor.length() == 3 && descriptor.startsWith("[[")
+						&& contains(declaredTypes, Type.getType(StringUtils.substring(descriptor, 2)))) {
+					//
+					return;
+					//
+				} // if
+					//
+			} // if
+				//
 			throw new RuntimeException(descriptor);
 			//
 		}
@@ -853,11 +1495,6 @@ public class JarUsedClassReport {
 		}
 
 		@Override
-		public void visitLookupSwitchInsn(final Label dflt, final int[] keys, final Label[] labels) {
-			throw new RuntimeException();
-		}
-
-		@Override
 		public void visitMethodInsn(final int opcode, final String owner, final String name, final String descriptor) {
 			throw new RuntimeException();
 		}
@@ -866,9 +1503,29 @@ public class JarUsedClassReport {
 		public void visitMethodInsn(final int opcode, final String owner, final String name, final String descriptor,
 				final boolean isInterface) {
 			//
-			if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), owner)) {
+			String s = owner;
+			//
+			if (s != null) {
 				//
-				add(classNames, owner);
+				if (s.startsWith("[L") && s.endsWith(";")) {
+					//
+					s = StringUtils.substringBetween(s, "[L", ";");
+					//
+				} else if (s.startsWith("[[L") && s.endsWith(";")) {
+					//
+					s = StringUtils.substringBetween(s, "[[L", ";");
+					//
+				} else if (StringUtils.length(s) == 2 && s.startsWith("[")) {
+					//
+					return;
+					//
+				} // if
+					//
+			} // if
+				//
+			if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), s)) {
+				//
+				add(classNames, s);
 				//
 			} // if
 				//
@@ -876,22 +1533,30 @@ public class JarUsedClassReport {
 
 		@Override
 		public void visitMultiANewArrayInsn(final String descriptor, final int numDimensions) {
-			throw new RuntimeException();
-		}
-
-		@Override
-		public void visitParameter(final String name, final int access) {
-			throw new RuntimeException();
+			//
+			String s = descriptor;
+			//
+			if (s != null && s.startsWith("[[L") && s.endsWith(";")) {
+				//
+				s = StringUtils.substring(s, 3, StringUtils.length(s) - 1);
+				//
+				if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), s)) {
+					//
+					add(classNames, s);
+					//
+				} // if
+					//
+				return;
+				//
+			} // if
+				//
+			throw new RuntimeException(descriptor);
+			//
 		}
 
 		@Override
 		public AnnotationVisitor visitParameterAnnotation(final int parameter, final String descriptor,
 				final boolean visible) {
-			throw new RuntimeException();
-		}
-
-		@Override
-		public void visitTableSwitchInsn(final int min, final int max, final Label dflt, final Label... labels) {
 			throw new RuntimeException();
 		}
 
@@ -921,9 +1586,33 @@ public class JarUsedClassReport {
 		@Override
 		public void visitTypeInsn(final int opcode, final String type) {
 			//
-			if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), type)) {
+			String s = type;
+			//
+			if (s != null) {
 				//
-				add(classNames, type);
+				if (s.startsWith("[L") && s.endsWith(";")) {
+					//
+					s = StringUtils.substringBetween(s, "[L", ";");
+					//
+				} else if (StringUtils.length(s) == 2 && s.startsWith("[")) {
+					//
+					return;
+					//
+				} else if (StringUtils.length(s) == 3 && s.startsWith("[[")) {
+					//
+					return;
+					//
+				} else if (StringUtils.length(s) > 3 && s.startsWith("[[L") && s.endsWith(";")) {
+					//
+					s = StringUtils.substring(s, 3, StringUtils.length(s) - 1);
+					//
+				} // if
+					//
+			} // if
+				//
+			if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), s)) {
+				//
+				add(classNames, s);
 				//
 			} // if
 				//
