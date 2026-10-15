@@ -21,6 +21,7 @@ import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import org.apache.commons.collections4.IterableUtils;
@@ -97,14 +98,12 @@ public class JarUsedClassReport {
 									&& Modifier.isStatic(f.getModifiers())),
 					f -> cast(Type.class, Narcissus.getStaticField(f))));
 			//
-			insertJavaClasses(
-					perform(intValue(getJavaClassMaxLevel(statement), 0),
-							() -> testAndApply(Objects::nonNull,
-									zipFile.getEntry(StringUtils.joinWith(".", replace(getMainClass(zipFile), '.', '/'),
-											"class")),
-									x -> zipFile.getInputStream(x), null),
-							declaredTypes),
-					statement, declaredTypes);
+			insertJavaClasses(perform(intValue(getJavaClassMaxLevel(statement), 0),
+					() -> testAndApply(Objects::nonNull,
+							getEntry(zipFile,
+									StringUtils.joinWith(".", replace(getMainClass(zipFile), '.', '/'), "class")),
+							x -> getInputStream(zipFile, x), null),
+					declaredTypes, zipFile), statement, declaredTypes);
 			//
 			Iterable<String> iterable = null;
 			//
@@ -127,10 +126,10 @@ public class JarUsedClassReport {
 					insertJavaClasses(
 							perform(i,
 									() -> testAndApply(Objects::nonNull,
-											zipFile.getEntry(
+											getEntry(zipFile,
 													StringUtils.joinWith(".", replace(string, '.', '/'), "class")),
-											x -> zipFile.getInputStream(x), null),
-									declaredTypes),
+											x -> getInputStream(zipFile, x), null),
+									declaredTypes, zipFile),
 							statement, declaredTypes, "java.base", "java.logging");
 					//
 				} // for
@@ -316,8 +315,8 @@ public class JarUsedClassReport {
 	}
 
 	private static Multimap<Integer, String> perform(final int index,
-			final FailableSupplier<InputStream, IOException> failableSupplier, final Collection<Type> declaredTypes)
-			throws IOException {
+			final FailableSupplier<InputStream, IOException> failableSupplier, final Collection<Type> declaredTypes,
+			final ZipFile zipFile) throws IOException {
 		//
 		Multimap<Integer, String> multimap = null;
 		//
@@ -476,13 +475,47 @@ public class JarUsedClassReport {
 						//
 				} // for
 					//
+				list = testAndApply(Objects::nonNull, mvi.serviceLoaderLoadClassNames, ArrayList::new, null);
+				//
+				List<String> lines = null;
+				//
+				for (int i = 0; i < IterableUtils.size(list); i++) {
+					//
+					try (final InputStream is2 = testAndApply(Objects::nonNull,
+							getEntry(zipFile,
+									String.format("META-INF/services/%1$s",
+											replace(IterableUtils.get(list, i), '/', '.'))),
+							x -> getInputStream(zipFile, x), null)) {
+						//
+						lines = testAndApply(Objects::nonNull, is2, x -> IOUtils.readLines(is2, StandardCharsets.UTF_8),
+								null);
+						//
+						for (int j = 0; j < IterableUtils.size(lines); j++) {
+							//
+							testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(lines, j),
+									multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
+									(a, b) -> put(b, Integer.valueOf(index + 1), a));
+							//
+						} // for
+							//
+					} // try
+						//
+				} // for
+					//
 			} // if
 				//
 		} // try
 			//
 		return multimap;
-
 		//
+	}
+
+	private static ZipEntry getEntry(final ZipFile instance, final String entry) {
+		return instance != null ? instance.getEntry(entry) : null;
+	}
+
+	private static InputStream getInputStream(final ZipFile instance, final ZipEntry entry) throws IOException {
+		return instance != null ? instance.getInputStream(entry) : null;
 	}
 
 	private static <T, U> void testAndAccept(final BiPredicate<T, U> predicate, final T t, final U u,
@@ -1251,6 +1284,10 @@ public class JarUsedClassReport {
 
 		private Collection<String> classNames = null;
 
+		private Object value = null;
+
+		private Collection<String> serviceLoaderLoadClassNames = null;
+
 		private MethodVisitorImpl() {
 			//
 			super(Opcodes.ASM9);
@@ -1520,6 +1557,25 @@ public class JarUsedClassReport {
 		public void visitMethodInsn(final int opcode, final String owner, final String name, final String descriptor,
 				final boolean isInterface) {
 			//
+			if (Objects.equals(owner, "java/util/ServiceLoader") && Objects.equals(name, "load")) {
+				//
+				String s = JarUsedClassReport.toString(value);
+				//
+				if (s != null && s.startsWith("L") && s.endsWith(";")) {
+					//
+					s = StringUtils.substringBetween(s, "L", ";");
+					//
+				} // if
+					//
+				if (!contains(serviceLoaderLoadClassNames = ObjectUtils.getIfNull(serviceLoaderLoadClassNames,
+						ArrayList::new), s)) {
+					//
+					add(serviceLoaderLoadClassNames, s);
+					//
+				} // if
+					//
+			} // if
+				//
 			String s = owner;
 			//
 			if (s != null) {
@@ -1635,6 +1691,11 @@ public class JarUsedClassReport {
 				//
 		}
 
+		@Override
+		public void visitLdcInsn(final Object value) {
+			super.visitLdcInsn(this.value = value);
+		}
+
 	}
 
 	private static int indexOf(final String instance, final String str) {
@@ -1643,9 +1704,8 @@ public class JarUsedClassReport {
 
 	private static String getMainClass(final ZipFile instance) throws IOException {
 		//
-		try (final InputStream is = testAndApply(Objects::nonNull,
-				instance != null ? instance.getEntry("META-INF/MANIFEST.MF") : null,
-				x -> instance != null ? instance.getInputStream(x) : null, null)) {
+		try (final InputStream is = testAndApply(Objects::nonNull, getEntry(instance, "META-INF/MANIFEST.MF"),
+				x -> getInputStream(instance, x), null)) {
 			//
 			final List<String> list = toList(map(
 					filter(stream(testAndApply(Objects::nonNull, is, x -> IOUtils.readLines(x, StandardCharsets.UTF_8),
