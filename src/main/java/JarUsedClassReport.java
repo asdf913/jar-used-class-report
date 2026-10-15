@@ -185,10 +185,6 @@ public class JarUsedClassReport {
 			//
 		} // if
 			//
-		ResultSet rs = null;
-		//
-		Boolean exists = null;
-		//
 		String value, name = null;
 		//
 		for (final Entry<Integer, String> entry : multimap.entries()) {
@@ -219,41 +215,48 @@ public class JarUsedClassReport {
 				//
 			} // if
 				//
-			exists = null;
-			//
-			if ((rs = statement != null ? statement.executeQuery(String.format(
-					"select exists(select 1 from java_class where class_name='%1$s');", value = entry.getValue()))
-					: null) != null) {
+			if (!BooleanUtils.toBooleanDefaultIfNull(checkClassNameExists(statement, value), false)) {
 				//
-				while (rs.next()) {
+				if (StringUtils.length(value) > 0 && Character.isUpperCase(value.charAt(0))) {
 					//
-					if (exists != null) {
-						//
-						throw new RuntimeException();
-						//
-					} // if
-						//
-					exists = Boolean.valueOf(rs.getBoolean(1));
-					//
-				} // while
-					//
-				if (!BooleanUtils.toBooleanDefaultIfNull(exists, false)) {
-					//
-					if (StringUtils.length(value) > 0 && Character.isUpperCase(value.charAt(0))) {
-						//
-						throw new RuntimeException(value);
-						//
-					} // if
-						//
-					statement.execute(String.format("insert into java_class(level,class_name)values(%1$s,'%2$s');",
-							entry.getKey(), value));
+					throw new RuntimeException(value);
 					//
 				} // if
 					//
+				statement.execute(String.format("insert into java_class(level,class_name)values(%1$s,'%2$s');",
+						entry.getKey(), value));
+				//
 			} // if
 				//
 		} // for
 			//
+	}
+
+	private static Boolean checkClassNameExists(final Statement instance, final String className) throws SQLException {
+		//
+		Boolean exists = null;
+		//
+		try (final ResultSet rs = instance != null
+				? instance.executeQuery(
+						String.format("select exists(select 1 from java_class where class_name='%1$s');", className))
+				: null) {
+			//
+			while (rs != null && rs.next()) {
+				//
+				if (exists != null) {
+					//
+					throw new RuntimeException();
+					//
+				} // if
+					//
+				exists = Boolean.valueOf(rs.getBoolean(1));
+				//
+			} // while
+				//
+		} // if
+			//
+		return exists;
+		//
 	}
 
 	private static List<String> getJavaClassNameByLevel(final Statement instance, final int level) throws SQLException {
