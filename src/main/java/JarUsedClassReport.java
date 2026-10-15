@@ -130,7 +130,7 @@ public class JarUsedClassReport {
 													StringUtils.joinWith(".", replace(string, '.', '/'), "class")),
 											x -> getInputStream(zipFile, x), null),
 									declaredTypes, zipFile),
-							statement, declaredTypes, "java.base", "java.logging");
+							statement, declaredTypes, "java.base", "java.logging", "java.management", "java.xml");
 					//
 				} // for
 					//
@@ -205,12 +205,6 @@ public class JarUsedClassReport {
 					&& ArrayUtils.contains(javaBasedModules, name)) {
 				//
 				continue;
-				//
-			} // if
-				//
-			if (name == null && (value != null && value.startsWith("java/"))) {
-				//
-				throw new RuntimeException(value);
 				//
 			} // if
 				//
