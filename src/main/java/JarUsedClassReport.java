@@ -25,6 +25,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import org.apache.commons.collections4.IterableUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.BooleanUtils;
@@ -63,7 +64,7 @@ public class JarUsedClassReport {
 			//
 		} // if
 			//
-		final File file = testAndApply(Objects::nonNull, ArrayUtils.get(args, 0), File::new, null);
+		File file = testAndApply(Objects::nonNull, ArrayUtils.get(args, 0), File::new, null);
 		//
 		if (file == null || !file.exists() || !file.isFile() || !file.canRead()) {
 			//
@@ -144,7 +145,13 @@ public class JarUsedClassReport {
 					//
 			} // for
 				//
-			System.out.println("index=" + index + ",countJavaClasses=" + countJavaClasses(statement));
+			final List<String> classNames = getJavaClassNames(statement);
+			//
+			System.out.println("index=" + index + ",count=" + IterableUtils.size(classNames));
+			//
+			System.out.println((file = new File("report.txt")).getAbsolutePath());
+			//
+			FileUtils.writeLines(file, toList(map(stream(classNames), x -> String.join(".", x, "class"))));
 			//
 		} // try
 			//
@@ -154,8 +161,7 @@ public class JarUsedClassReport {
 		//
 		Integer count = null;
 		//
-		try (final ResultSet rs = statement != null ? statement.executeQuery("select count(1) from java_class;")
-				: null) {
+		try (final ResultSet rs = executeQuery(statement, "select count(1) from java_class;")) {
 			//
 			while (rs != null && rs.next()) {
 				//
@@ -173,6 +179,10 @@ public class JarUsedClassReport {
 			//
 		return count;
 		//
+	}
+
+	private static ResultSet executeQuery(final Statement instance, final String sql) throws SQLException {
+		return instance != null ? instance.executeQuery(sql) : null;
 	}
 
 	private static void insertJavaClasses(final Multimap<Integer, String> multimap, final Statement statement,
@@ -229,10 +239,8 @@ public class JarUsedClassReport {
 		//
 		Boolean exists = null;
 		//
-		try (final ResultSet rs = instance != null
-				? instance.executeQuery(
-						String.format("select exists(select 1 from java_class where class_name='%1$s');", className))
-				: null) {
+		try (final ResultSet rs = executeQuery(instance,
+				String.format("select exists(select 1 from java_class where class_name='%1$s');", className))) {
 			//
 			while (rs != null && rs.next()) {
 				//
@@ -252,14 +260,37 @@ public class JarUsedClassReport {
 		//
 	}
 
+	private static List<String> getJavaClassNames(final Statement instance) throws SQLException {
+		//
+		List<String> list = null;
+		//
+		try (final ResultSet rs = executeQuery(instance,
+				"select distinct class_name from java_class order by class_name;")) {
+			//
+			String string = null;
+			//
+			while (rs != null && rs.next()) {
+				//
+				if (!contains(list = ObjectUtils.getIfNull(list, ArrayList::new), string = rs.getString(1))) {
+					//
+					add(list, string);
+					//
+				} // if
+					//
+			} // while
+				//
+		} // try
+			//
+		return list;
+		//
+	}
+
 	private static List<String> getJavaClassNameByLevel(final Statement instance, final int level) throws SQLException {
 		//
 		List<String> list = null;
 		//
-		try (final ResultSet rs = instance != null
-				? instance.executeQuery(String.format(
-						"select distinct class_name from java_class where level=%1$s order by class_name;", level))
-				: null) {
+		try (final ResultSet rs = executeQuery(instance, String
+				.format("select distinct class_name from java_class where level=%1$s order by class_name;", level))) {
 			//
 			String string = null;
 			//
@@ -287,8 +318,7 @@ public class JarUsedClassReport {
 		//
 		Integer max = null;
 		//
-		try (final ResultSet rs = instance != null ? instance.executeQuery("select max(level) from java_class;")
-				: null) {
+		try (final ResultSet rs = executeQuery(instance, "select max(level) from java_class;")) {
 			//
 			while (rs != null && rs.next()) {
 				//
