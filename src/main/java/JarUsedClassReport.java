@@ -516,7 +516,8 @@ public class JarUsedClassReport {
 						//
 						for (int j = 0; j < IterableUtils.size(lines); j++) {
 							//
-							testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(lines, j),
+							testAndAccept((a, b) -> a != null && !containsValue(b, a),
+									replace(IterableUtils.get(lines, j), '.', '/'),
 									multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 									(a, b) -> put(b, Integer.valueOf(index + 1), a));
 							//
