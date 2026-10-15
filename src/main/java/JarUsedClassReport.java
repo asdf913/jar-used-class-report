@@ -534,7 +534,6 @@ public class JarUsedClassReport {
 		return multimap;
 		//
 	}
-
 	private static ZipEntry getEntry(final ZipFile instance, final String entry) {
 		return instance != null ? instance.getEntry(entry) : null;
 	}
@@ -942,7 +941,7 @@ public class JarUsedClassReport {
 				final String fieldType = StringUtils.substring(descriptor, 1, StringUtils.length(descriptor) - 1);
 				//
 				if (fieldType != null && ((fieldType.contains(";") || fieldType.contains("[")
-						|| Objects.equals(fieldType, "-TT") || fieldType.endsWith("<*>"))
+						|| Objects.equals(fieldType, "-TT") || fieldType.endsWith("<*>") || fieldType.contains("<"))
 						|| (fieldType.length() > 0 && Character.isUpperCase(fieldType.charAt(0))))) {
 					//
 					throw new RuntimeException(fieldType);
@@ -970,7 +969,7 @@ public class JarUsedClassReport {
 					//
 					final String[] ss = StringUtils.split(fieldType, ";");
 					//
-					String s, sa, saAfter, saBetween, sb = null;
+					String s, sa, saa, sab, saAfter, saBetween, sb = null;
 					//
 					for (int i = 0; ss != null && i < ss.length; i++) {
 						//
@@ -1069,10 +1068,29 @@ public class JarUsedClassReport {
 									//
 								} // if
 									//
-								if (!ArrayUtils.contains(fieldTypes, sa = StringUtils.substringAfter(s, "<L"))) {
+								if ((sa = StringUtils.substringAfter(s, "<L")) != null && sa.contains("<L")) {
 									//
-									fieldTypes = ArrayUtils.add(fieldTypes, sa);
+									if (!ArrayUtils.contains(fieldTypes, saa = StringUtils.substringAfter(sa, "<L"))) {
+										//
+										fieldTypes = ArrayUtils.add(fieldTypes, saa);
+										//
+									} // if
+										//
+										//
+									if (!ArrayUtils.contains(fieldTypes, sab = StringUtils.substringBefore(sa, "<L"))) {
+										//
+										fieldTypes = ArrayUtils.add(fieldTypes, sab);
+										//
+									} // if
+										//
+								} else {
 									//
+									if (!ArrayUtils.contains(fieldTypes, sa)) {
+										//
+										fieldTypes = ArrayUtils.add(fieldTypes, sa);
+										//
+									} // if
+										//
 								} // if
 									//
 								continue;
@@ -1138,9 +1156,17 @@ public class JarUsedClassReport {
 						} // if
 							//
 						if (s != null && ((s.contains("<") || s.contains("[") || Objects.equals(s, "-TT")
-								|| s.endsWith("<*>")) || (s.length() > 0 && Character.isUpperCase(s.charAt(0))))) {
+								|| s.endsWith("<*>") || s.contains("<"))
+								|| (s.length() > 0 && Character.isUpperCase(s.charAt(0))))) {
 							//
 							throw new RuntimeException(ArrayUtils.get(ss, i) + " " + s);
+							//
+						} // if
+							//
+						if (fieldTypes != null
+								&& Arrays.stream(fieldTypes).anyMatch(x -> x != null && x.contains("<"))) {
+							//
+							throw new RuntimeException(fieldType);
 							//
 						} // if
 							//
