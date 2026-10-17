@@ -149,7 +149,9 @@ public class JarUsedClassReport {
 			//
 			System.out.println("index=" + index + ",count=" + IterableUtils.size(classNames));
 			//
-			System.out.println((file = new File("report.txt")).getAbsolutePath());
+			System.out.println((file = new File(
+					StringUtils.joinWith(".", StringUtils.substringBeforeLast(file.getName(), "."), "txt")))
+					.getAbsolutePath());
 			//
 			FileUtils.writeLines(file, toList(map(stream(classNames), x -> String.join(".", x, "class"))));
 			//
@@ -534,6 +536,7 @@ public class JarUsedClassReport {
 		return multimap;
 		//
 	}
+
 	private static ZipEntry getEntry(final ZipFile instance, final String entry) {
 		return instance != null ? instance.getEntry(entry) : null;
 	}
