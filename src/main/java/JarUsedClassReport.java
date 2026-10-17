@@ -1216,6 +1216,22 @@ public class JarUsedClassReport {
 								//
 								s = StringUtils.substringBefore(s, "<TO");
 								//
+							} else if (s != null && s.contains("<-L")) {
+								//
+								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<-L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sb);
+									//
+								} // if
+									//
+								if (!ArrayUtils.contains(fieldTypes, sa = StringUtils.substringAfter(s, "<-L"))) {
+									//
+									fieldTypes = ArrayUtils.add(fieldTypes, sa);
+									//
+								} // if
+									//
+								continue;
+								//
 							} // if
 								//
 						} else if (s != null && s.startsWith("L")) {
@@ -1236,7 +1252,7 @@ public class JarUsedClassReport {
 								|| s.endsWith("<*>") || s.contains("<"))
 								|| (s.length() > 0 && Character.isUpperCase(s.charAt(0))))) {
 							//
-							throw new RuntimeException(ArrayUtils.get(ss, i) + " " + s);
+							throw new RuntimeException(fieldType + " " + ArrayUtils.get(ss, i) + " " + s);
 							//
 						} // if
 							//
@@ -1488,6 +1504,124 @@ public class JarUsedClassReport {
 		public void visitInvokeDynamicInsn(final String name, final String descriptor,
 				final Handle bootstrapMethodHandle, final Object... bootstrapMethodArguments) {
 			//
+			Object bootstrapMethodArgument = null;
+			//
+			Type type = null;
+			//
+			Handle handler = null;
+			//
+			Type[] types = null;
+			//
+			String toString, owner = null;
+			//
+			for (int i = 0; bootstrapMethodArguments != null && i < bootstrapMethodArguments.length; i++) {
+				//
+				if ((bootstrapMethodArgument = ArrayUtils.get(bootstrapMethodArguments, i)) instanceof Number) {
+					//
+					continue;
+					//
+				} // if
+					//
+				if ((type = cast(Type.class, bootstrapMethodArgument)) != null) {
+					//
+					if ((toString = JarUsedClassReport.toString(type.getReturnType())) == null) {
+						//
+						continue;
+						//
+					} // if
+						//
+					if ((toString = JarUsedClassReport.toString(type.getReturnType())) != null
+							&& toString.startsWith("L") && toString.endsWith(";")) {
+						//
+						toString = StringUtils.substringBetween(toString, "L", ";");
+						//
+					} else if (toString != null && toString.startsWith("[L") && toString.endsWith(";")) {
+						//
+						toString = StringUtils.substringBetween(toString, "[L", ";");
+						//
+					} // if
+						//
+					if (declaredTypes == null) {
+						//
+						declaredTypes = toList(map(filter(
+								stream(testAndApply(Objects::nonNull, Type.class, FieldUtils::getAllFieldsList, null)),
+								f -> f != null && Objects.equals(f.getType(), Type.class)
+										&& Modifier.isStatic(f.getModifiers())),
+								f -> cast(Type.class, Narcissus.getStaticField(f))));
+						//
+					} // if
+						//
+					if (declaredTypes != null && StringUtils.length(toString) == 1
+							&& contains(declaredTypes, Type.getType(toString))) {
+						//
+						continue;
+						//
+					} // if
+						//
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), toString)) {
+						//
+						add(classNames, toString);
+						//
+					} // if
+						//
+					types = type.getArgumentTypes();
+					//
+					for (int j = 0; types != null && j < types.length; j++) {
+						//
+						if ((toString = JarUsedClassReport.toString(types[j])) != null && toString.startsWith("L")
+								&& toString.endsWith(";")) {
+							//
+							toString = StringUtils.substringBetween(toString, "L", ";");
+							//
+						} else if (toString != null && toString.startsWith("[L") && toString.endsWith(";")) {
+							//
+							toString = StringUtils.substringBetween(toString, "[L", ";");
+							//
+						} // if
+							//
+						if (declaredTypes == null) {
+							//
+							declaredTypes = toList(map(
+									filter(stream(testAndApply(Objects::nonNull, Type.class,
+											FieldUtils::getAllFieldsList, null)),
+											f -> f != null && Objects.equals(f.getType(), Type.class)
+													&& Modifier.isStatic(f.getModifiers())),
+									f -> cast(Type.class, Narcissus.getStaticField(f))));
+							//
+						} // if
+							//
+						if (declaredTypes != null && StringUtils.length(toString) == 1
+								&& contains(declaredTypes, Type.getType(toString))) {
+							//
+							continue;
+							//
+						} // if
+							//
+						if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), toString)) {
+							//
+							add(classNames, toString);
+							//
+						} // if
+							//
+					} // for
+						//
+				} else if ((handler = cast(Handle.class, bootstrapMethodArgument)) != null) {
+					//
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new),
+							owner = handler.getOwner())) {
+						//
+						add(classNames, owner);
+						//
+					} // if
+						//
+				} else {
+					//
+					throw new RuntimeException(JarUsedClassReport.toString(bootstrapMethodArgument));
+					//
+				} // if
+					//
+			} // for
+				//
 			if (descriptor != null && descriptor.endsWith(";")) {
 				//
 				final int index1 = StringUtils.indexOf(descriptor, '(');
