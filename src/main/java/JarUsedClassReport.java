@@ -11,6 +11,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Objects;
@@ -45,6 +46,7 @@ import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.TypePath;
+import org.zeroturnaround.zip.ZipUtil;
 
 import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Multimap;
@@ -53,6 +55,8 @@ import com.j256.simplemagic.ContentInfoUtil;
 import com.j256.simplemagic.ContentType;
 
 import io.github.toolfactory.narcissus.Narcissus;
+
+;
 
 public class JarUsedClassReport {
 
@@ -72,7 +76,9 @@ public class JarUsedClassReport {
 			//
 		} // if
 			//
-		final ContentInfo ci = new ContentInfoUtil().findMatch(file);
+		final ContentInfoUtil ciu = new ContentInfoUtil();
+		//
+		ContentInfo ci = ciu.findMatch(file);
 		//
 		if (!Objects.equals(getContentType(ci), ContentType.ZIP)) {
 			//
@@ -80,11 +86,51 @@ public class JarUsedClassReport {
 			//
 		} // if
 			//
+		String name = null;
+		//
+		List<ZipEntry> javaClassEntries = null;
+		//
+		Collection<String> javaClassEntriesRequired = null;
+		//
+		File fileNew = null;
+		//
 		try (final ZipFile zipFile = new ZipFile(file);
 				final Connection connection = DriverManager
 						.getConnection(String.format("jdbc:duckdb:%1$s", new File(".", "report.db").getAbsolutePath()));
 				final Statement statement = connection != null ? connection.createStatement() : null) {
 			//
+			Enumeration<?> enumeration = zipFile.entries();
+			//
+			ZipEntry zipEntry = null;
+			//
+			while (enumeration != null && enumeration.hasMoreElements()) {
+				//
+				if ((zipEntry = cast(ZipEntry.class, enumeration.nextElement())) == null) {
+					//
+					continue;
+					//
+				} // if
+					//
+				try (final InputStream is2 = getInputStream(zipFile, zipEntry)) {
+					//
+					if ((ci = ciu.findMatch(is2)) == null
+							|| !Objects.equals(ci.getContentType(), ContentType.JAVA_APPLET)) {
+						//
+						continue;
+						//
+					} // if
+						//
+					if (!contains(javaClassEntries = ObjectUtils.getIfNull(javaClassEntries, ArrayList::new),
+							zipEntry)) {
+						//
+						add(javaClassEntries, zipEntry);
+						//
+					} // if
+						//
+				} // try
+					//
+			} // while
+				//
 			if (statement != null) {
 				//
 				statement.execute("create table if not exists java_class(level int,class_name text);");
@@ -149,14 +195,42 @@ public class JarUsedClassReport {
 			//
 			System.out.println("index=" + index + ",count=" + IterableUtils.size(classNames));
 			//
-			System.out.println((file = new File(
-					StringUtils.joinWith(".", StringUtils.substringBeforeLast(file.getName(), "."), "txt")))
-					.getAbsolutePath());
+			FileUtils.copyFile(file, fileNew = new File(
+					StringUtils.join(StringUtils.substringBeforeLast(name = file.getName(), "."), "(Reduced).jar")));
 			//
-			FileUtils.writeLines(file, toList(map(stream(classNames), x -> String.join(".", x, "class"))));
+			System.out.println(fileNew.getAbsolutePath());
+			//
+			System.out.println(
+					(file = new File(StringUtils.joinWith(".", StringUtils.substringBeforeLast(name, "."), "txt")))
+							.getAbsolutePath());
+			//
+			FileUtils.writeLines(file,
+					javaClassEntriesRequired = toList(map(stream(classNames), x -> String.join(".", x, "class"))));
 			//
 		} // try
 			//
+		for (int i = IterableUtils.size(javaClassEntries) - 1; i >= 0; i--) {
+			//
+			for (int j = 0; j < IterableUtils.size(javaClassEntriesRequired); j++) {
+				//
+				if (Objects.equals(IterableUtils.get(javaClassEntriesRequired, j),
+						toString(IterableUtils.get(javaClassEntries, i)))) {
+					//
+					javaClassEntries.remove(i);
+					//
+					break;
+					//
+				} // if
+					//
+			} // for
+				//
+		} // for
+			//
+		ZipUtil.removeEntries(fileNew,
+				javaClassEntries != null
+						? javaClassEntries.stream().map(JarUsedClassReport::toString).toArray(String[]::new)
+						: null);
+		//
 	}
 
 	private static Integer countJavaClasses(final Statement statement) throws SQLException {
