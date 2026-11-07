@@ -560,6 +560,10 @@ public class JarUsedClassReport {
 						//
 						string = string.substring(3);
 						//
+					} else if (string.startsWith("I[BL")) {
+						//
+						string = string.substring(4);
+						//
 					} // if
 						//
 					testAndAccept((a, b) -> a != null && !containsValue(b, a), string,
