@@ -152,6 +152,22 @@ public class JarUsedClassReport {
 							x -> getInputStream(zipFile, x), null),
 					declaredTypes, zipFile), statement, declaredTypes);
 			//
+			for (int i = 1; args != null && i < args.length; i++) {
+				//
+				final int index = i;
+				//
+				insertJavaClasses(
+						perform(1,
+								() -> testAndApply(Objects::nonNull,
+										getEntry(zipFile,
+												StringUtils.joinWith(".", ArrayUtils.get(args, index), "class")),
+										x -> getInputStream(zipFile, x), null),
+								declaredTypes, zipFile),
+						statement, declaredTypes);
+				//
+				//
+			} // for
+				//
 			Iterable<String> iterable = null;
 			//
 			int countJavaClasses = countJavaClasses(statement);
