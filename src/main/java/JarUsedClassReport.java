@@ -1102,7 +1102,7 @@ public class JarUsedClassReport {
 					for (int i = 0; ss != null && i < ss.length; i++) {
 						//
 						if ((s = ArrayUtils.get(ss, i)) == null
-								|| contains(Arrays.asList("TA", "TB", "TC", "+TB", "+TA", "*>"), s)) {
+								|| contains(Arrays.asList("TA", "TB", "TC", "+TB", "+TA", "*>", "TPRV"), s)) {
 							//
 							continue;
 							//
