@@ -1443,7 +1443,28 @@ public class JarUsedClassReport {
 		@Override
 		public AnnotationVisitor visitTypeAnnotation(final int typeRef, final TypePath typePath,
 				final String descriptor, final boolean visible) {
+			//
+			String s = descriptor;
+			//
+			if (s != null) {
+				//
+				if (s.startsWith("L") && s.endsWith(";")) {
+					//
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new),
+							s = StringUtils.substringBetween(descriptor, "L", ";"))) {
+						//
+						add(classNames, s);
+						//
+					} // if
+						//
+					return super.visitTypeAnnotation(typeRef, typePath, descriptor, visible);
+					//
+				} // if
+					//
+			} // if
+				//
 			throw new RuntimeException();
+			//
 		}
 
 	}
