@@ -1549,7 +1549,7 @@ public class JarUsedClassReport {
 
 		@Override
 		public void visitAnnotableParameterCount(final int parameterCount, final boolean visible) {
-			throw new RuntimeException();
+			super.visitAnnotableParameterCount(parameterCount, visible);
 		}
 
 		@Override
