@@ -1214,6 +1214,12 @@ public class JarUsedClassReport {
 								//
 								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<L"))) {
 									//
+									if (sb != null && sb.startsWith("+L")) {
+										//
+										sb = sb.substring(2);
+										//
+									} // if
+										//
 									fieldTypes = ArrayUtils.add(fieldTypes, sb);
 									//
 								} // if
