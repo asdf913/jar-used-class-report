@@ -1571,7 +1571,7 @@ public class JarUsedClassReport {
 			//
 			classNames = new ArrayList<>() {
 				public boolean add(final String arg) {
-					if (Objects.equals(arg, "JI")) {
+					if (arg != null && arg.startsWith("[")) {
 						throw new RuntimeException(arg);
 					}
 					return super.add(arg);
@@ -1691,7 +1691,8 @@ public class JarUsedClassReport {
 						//
 					} // if
 						//
-					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), toString)) {
+					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), toString)
+							&& !contains(Arrays.asList("[B", "[Z", "[C", "[D", "[F", "[I", "[J", "[S"), toString)) {
 						//
 						add(classNames, toString);
 						//
@@ -1730,7 +1731,8 @@ public class JarUsedClassReport {
 							//
 						} // if
 							//
-						if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), toString)) {
+						if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), toString)
+								&& !Objects.equals(toString, "[B")) {
 							//
 							add(classNames, toString);
 							//
@@ -1816,6 +1818,20 @@ public class JarUsedClassReport {
 						//
 						continue;
 						//
+					} // if
+						//
+					if (s != null) {
+						//
+						if (s.startsWith("[BL")) {
+							//
+							s = s.substring(3);
+							//
+						} else if (s.startsWith("[B[BL")) {
+							//
+							s = s.substring(5);
+							//
+						} // if
+							//
 					} // if
 						//
 					if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new), s)) {
