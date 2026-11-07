@@ -1074,6 +1074,12 @@ public class JarUsedClassReport {
 							//
 						} // if
 							//
+						if (Objects.equals(s, "java/lang/Iterable<+Lorg/apache/sshd/common/future/SshFuture<TT")) {
+							//
+							System.out.println();
+							//
+						} // if
+							//
 						if (s.contains("<")) {
 							//
 							if (s.startsWith("[L")) {
@@ -1131,8 +1137,29 @@ public class JarUsedClassReport {
 									//
 							} else if (s.endsWith("<TT")) {
 								//
-								s = StringUtils.substringBefore(s, "<TT");
-								//
+								if (s.contains("<+L")) {
+									//
+									if (!ArrayUtils.contains(fieldTypes, sa = StringUtils.substringBefore(s, "<+L"))) {
+										//
+										fieldTypes = ArrayUtils.add(fieldTypes, sa);
+										//
+									} // if
+										//
+									if (!ArrayUtils.contains(fieldTypes,
+											sa = StringUtils.substringBetween(s, "<+L", "<TT"))) {
+										//
+										fieldTypes = ArrayUtils.add(fieldTypes, sa);
+										//
+									} // if
+										//
+									continue;
+									//
+								} else {
+									//
+									s = StringUtils.substringBefore(s, "<TT");
+									//
+								} // if
+									//
 							} else if (s.endsWith("<TB")) {
 								//
 								s = StringUtils.substringBefore(s, "<TB");
@@ -1174,7 +1201,6 @@ public class JarUsedClassReport {
 										fieldTypes = ArrayUtils.add(fieldTypes, saa);
 										//
 									} // if
-										//
 										//
 									if (!ArrayUtils.contains(fieldTypes, sab = StringUtils.substringBefore(sa, "<L"))) {
 										//
