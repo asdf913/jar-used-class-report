@@ -1079,12 +1079,6 @@ public class JarUsedClassReport {
 							//
 						} // if
 							//
-						if (Objects.equals(s, "java/lang/Iterable<+Lorg/apache/sshd/common/future/SshFuture<TT")) {
-							//
-							System.out.println();
-							//
-						} // if
-							//
 						if (s.contains("<")) {
 							//
 							if (s.startsWith("[L")) {
@@ -1168,6 +1162,10 @@ public class JarUsedClassReport {
 							} else if (s.endsWith("<TB")) {
 								//
 								s = StringUtils.substringBefore(s, "<TB");
+								//
+							} else if (s.endsWith("<+TA")) {
+								//
+								s = StringUtils.substringBefore(s, "<+TA");
 								//
 							} else if (s.contains("<[L")) {
 								//
