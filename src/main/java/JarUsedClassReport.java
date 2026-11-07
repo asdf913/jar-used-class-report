@@ -480,9 +480,23 @@ public class JarUsedClassReport {
 						//
 				} // for
 					//
+				String string = null;
+				//
 				for (int i = 0; cvi.fieldTypes != null && i < cvi.fieldTypes.length; i++) {
 					//
-					testAndAccept((a, b) -> a != null && !containsValue(b, a), ArrayUtils.get(cvi.fieldTypes, i),
+					if ((string = ArrayUtils.get(cvi.fieldTypes, i)) == null) {
+						//
+						continue;
+						//
+					} // if
+						//
+					if (string.endsWith("<*>")) {
+						//
+						string = string.substring(0, StringUtils.length(string) - 3);
+						//
+					} // if
+						//
+					testAndAccept((a, b) -> a != null && !containsValue(b, a), string,
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
@@ -490,7 +504,7 @@ public class JarUsedClassReport {
 							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
 									|| x.endsWith("<*>") || x.equals("java/")))) {
 						//
-						throw new RuntimeException(ArrayUtils.get(cvi.fieldTypes, i));
+						throw new RuntimeException(string);
 						//
 					} // if
 						//
@@ -540,8 +554,6 @@ public class JarUsedClassReport {
 					//
 				list = removeIfClassInMoudleNames(toArray(mvi.classNames, String[]::new), "java.desktop", "java.base",
 						"java.management");
-				//
-				String string = null;
 				//
 				for (int i = 0; i < IterableUtils.size(list); i++) {
 					//
