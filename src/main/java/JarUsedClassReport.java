@@ -1167,6 +1167,10 @@ public class JarUsedClassReport {
 								//
 								s = StringUtils.substringBefore(s, "<+TA");
 								//
+							} else if (s.endsWith("<-TA")) {
+								//
+								s = StringUtils.substringBefore(s, "<-TA");
+								//
 							} else if (s.contains("<[L")) {
 								//
 								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<[L"))) {
