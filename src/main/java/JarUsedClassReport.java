@@ -1085,7 +1085,8 @@ public class JarUsedClassReport {
 					//
 					for (int i = 0; ss != null && i < ss.length; i++) {
 						//
-						if ((s = ArrayUtils.get(ss, i)) == null || contains(Arrays.asList("TA", "TB", "TC"), s)) {
+						if ((s = ArrayUtils.get(ss, i)) == null
+								|| contains(Arrays.asList("TA", "TB", "TC", "+TB", "+TA", "*>"), s)) {
 							//
 							continue;
 							//
@@ -1361,8 +1362,8 @@ public class JarUsedClassReport {
 							//
 						} // if
 							//
-						if (fieldTypes != null
-								&& Arrays.stream(fieldTypes).anyMatch(x -> x != null && x.contains("<"))) {
+						if (fieldTypes != null && Arrays.stream(fieldTypes).anyMatch(x -> x != null
+								&& Boolean.logicalOr(x.contains("<"), x.contains("[") || x.contains("+")))) {
 							//
 							throw new RuntimeException(fieldType);
 							//
