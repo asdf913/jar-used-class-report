@@ -1073,7 +1073,7 @@ public class JarUsedClassReport {
 					//
 					for (int i = 0; ss != null && i < ss.length; i++) {
 						//
-						if ((s = ArrayUtils.get(ss, i)) == null || Objects.equals(s, "TA")) {
+						if ((s = ArrayUtils.get(ss, i)) == null || contains(Arrays.asList("TA", "TB", "TC"), s)) {
 							//
 							continue;
 							//
