@@ -1253,6 +1253,12 @@ public class JarUsedClassReport {
 									//
 								if (!ArrayUtils.contains(fieldTypes, sa = StringUtils.substringAfter(s, "<+L"))) {
 									//
+									if (sa != null && sa.endsWith("<*>")) {
+										//
+										sa = sa.substring(0, StringUtils.length(sa) - 3);
+										//
+									} // if
+										//
 									fieldTypes = ArrayUtils.add(fieldTypes, sa);
 									//
 								} // if
