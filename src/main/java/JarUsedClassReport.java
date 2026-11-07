@@ -1615,13 +1615,8 @@ public class JarUsedClassReport {
 					} // if
 						//
 				} else if (bootstrapMethodArgument instanceof String string && string != null
-						&& 
-						
-						(string.startsWith("Illegal constraint type: ")
-								|| string.startsWith("Constraint must be String or ComponentConstraint:")
-						)
-						
-						) {
+						&& (string.startsWith("Illegal constraint type: ")
+								|| string.startsWith("Constraint must be String or ComponentConstraint:"))) {
 					//
 					System.err.println(bootstrapMethodArgument);
 					//
