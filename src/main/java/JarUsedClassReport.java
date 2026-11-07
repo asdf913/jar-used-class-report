@@ -541,9 +541,27 @@ public class JarUsedClassReport {
 				list = removeIfClassInMoudleNames(toArray(mvi.classNames, String[]::new), "java.desktop", "java.base",
 						"java.management");
 				//
+				String string = null;
+				//
 				for (int i = 0; i < IterableUtils.size(list); i++) {
 					//
-					testAndAccept((a, b) -> a != null && !containsValue(b, a), IterableUtils.get(list, i),
+					if ((string = IterableUtils.get(list, i)) == null || contains(Arrays.asList("II", "IZ"), string)) {
+						//
+						continue;
+						//
+					} // if
+						//
+					if (string.startsWith("IL") || string.startsWith("JL")) {
+						//
+						string = string.substring(2);
+						//
+					} else if (string.startsWith("FIL")) {
+						//
+						string = string.substring(3);
+						//
+					} // if
+						//
+					testAndAccept((a, b) -> a != null && !containsValue(b, a), string,
 							multimap = ObjectUtils.getIfNull(multimap, LinkedHashMultimap::create),
 							(a, b) -> put(b, Integer.valueOf(index + 1), a));
 					//
@@ -551,7 +569,7 @@ public class JarUsedClassReport {
 							x -> x != null && (x.contains(";") || (x.length() > 0 && Character.isUpperCase(x.charAt(0)))
 									|| x.endsWith("<*>") || x.equals("java/")))) {
 						//
-						throw new RuntimeException(IterableUtils.get(list, i));
+						throw new RuntimeException(string);
 						//
 					} // if
 						//
