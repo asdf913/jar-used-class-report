@@ -1999,6 +1999,12 @@ public class JarUsedClassReport {
 		@Override
 		public void visitMultiANewArrayInsn(final String descriptor, final int numDimensions) {
 			//
+			if (Objects.equals(descriptor, "[[C")) {
+				//
+				return;
+				//
+			} // if
+				//
 			String s = descriptor;
 			//
 			if (s != null && s.startsWith("[[L") && s.endsWith(";")) {
