@@ -1996,7 +1996,7 @@ public class JarUsedClassReport {
 		@Override
 		public AnnotationVisitor visitParameterAnnotation(final int parameter, final String descriptor,
 				final boolean visible) {
-			throw new RuntimeException();
+			return super.visitParameterAnnotation(parameter, descriptor, visible);
 		}
 
 		@Override
