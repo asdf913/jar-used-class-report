@@ -1068,7 +1068,7 @@ public class JarUsedClassReport {
 					//
 					for (int i = 0; ss != null && i < ss.length; i++) {
 						//
-						if ((s = ArrayUtils.get(ss, i)) == null) {
+						if ((s = ArrayUtils.get(ss, i)) == null || Objects.equals(s, "TA")) {
 							//
 							continue;
 							//
@@ -1132,6 +1132,10 @@ public class JarUsedClassReport {
 							} else if (s.endsWith("<TT")) {
 								//
 								s = StringUtils.substringBefore(s, "<TT");
+								//
+							} else if (s.endsWith("<TB")) {
+								//
+								s = StringUtils.substringBefore(s, "<TB");
 								//
 							} else if (s.contains("<[L")) {
 								//
