@@ -1479,7 +1479,7 @@ public class JarUsedClassReport {
 
 		@Override
 		public AnnotationVisitor visitAnnotationDefault() {
-			throw new RuntimeException();
+			return super.visitAnnotationDefault();
 		}
 
 		@Override
