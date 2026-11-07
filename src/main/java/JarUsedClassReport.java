@@ -1192,6 +1192,10 @@ public class JarUsedClassReport {
 								//
 								s = StringUtils.substringBefore(s, "<*>");
 								//
+							} else if (s.endsWith("<**>")) {
+								//
+								s = StringUtils.substringBefore(s, "<**>");
+								//
 							} else if (s.endsWith("<TE")) {
 								//
 								s = StringUtils.substringBefore(s, "<TE");
