@@ -564,7 +564,7 @@ public class JarUsedClassReport {
 						//
 					} // if
 						//
-					if (string.startsWith("IL") || string.startsWith("JL")) {
+					if (string.startsWith("IL") || string.startsWith("JL") || string.startsWith("BL")) {
 						//
 						string = string.substring(2);
 						//
