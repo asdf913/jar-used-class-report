@@ -545,7 +545,8 @@ public class JarUsedClassReport {
 				//
 				for (int i = 0; i < IterableUtils.size(list); i++) {
 					//
-					if ((string = IterableUtils.get(list, i)) == null || contains(Arrays.asList("II", "IZ"), string)) {
+					if ((string = IterableUtils.get(list, i)) == null
+							|| contains(Arrays.asList("II", "IZ", "ZZ"), string)) {
 						//
 						continue;
 						//
