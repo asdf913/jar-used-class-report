@@ -1295,6 +1295,18 @@ public class JarUsedClassReport {
 								//
 								s = StringUtils.substringBefore(s, "<+TR");
 								//
+							} else if (s.endsWith("<TPUB")) {
+								//
+								s = StringUtils.substringBefore(s, "<TPUB");
+								//
+							} else if (s.endsWith("<TPRV")) {
+								//
+								s = StringUtils.substringBefore(s, "<TPRV");
+								//
+							} else if (s.endsWith("<+TT")) {
+								//
+								s = StringUtils.substringBefore(s, "<+TT");
+								//
 							} else if (s != null && s.contains("<-L")) {
 								//
 								if (!ArrayUtils.contains(fieldTypes, sb = StringUtils.substringBefore(s, "<-L"))) {
