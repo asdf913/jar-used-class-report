@@ -2149,7 +2149,52 @@ public class JarUsedClassReport {
 
 		@Override
 		public void visitLdcInsn(final Object value) {
+			//
+			if (value instanceof Type) {
+				//
+				String toString = Objects.toString(value);
+				//
+				if (toString != null) {
+					//
+					if (toString.endsWith(";")) {
+						//
+						if (startsWith(toString = StringUtils.substring(toString, 0, StringUtils.length(toString) - 1),
+								"L")) {
+							//
+							if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new),
+									toString = StringUtils.substring(toString, 1))) {
+								//
+								add(classNames, toString);
+								//
+							} // if
+								//
+						} else if (startsWith(toString, "[L")) {
+							//
+							if (!contains(classNames = ObjectUtils.getIfNull(classNames, ArrayList::new),
+									toString = StringUtils.substring(toString, 2))) {
+								//
+								add(classNames, toString);
+								//
+							} // if
+								//
+						} else {
+							//
+							throw new RuntimeException(toString);
+							//
+						} // if
+							//
+					} // if
+						//
+				} else {
+					//
+					throw new RuntimeException(toString);
+					//
+				} // if
+					//
+			} // if
+				//
 			super.visitLdcInsn(this.value = value);
+			//
 		}
 
 	}
