@@ -56,8 +56,6 @@ import com.j256.simplemagic.ContentType;
 
 import io.github.toolfactory.narcissus.Narcissus;
 
-;
-
 public class JarUsedClassReport {
 
 	public static void main(final String[] args) throws IOException, SQLException {
